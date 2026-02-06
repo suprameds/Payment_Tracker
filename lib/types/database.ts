@@ -1,9 +1,12 @@
-// Re-export types from Supabase client for convenience
+// Import types from Supabase client
+import type { Dispatch, PaymentReconciliationLog, OCRProcessingQueue } from '../supabase/client';
+
+// Re-export for convenience
 export type {
   Dispatch,
   PaymentReconciliationLog,
   OCRProcessingQueue,
-} from '../supabase/client';
+};
 
 // Form input types
 export interface DispatchFormInput {

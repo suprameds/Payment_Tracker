@@ -121,16 +121,16 @@ export default function OCRPage() {
         // Step 1: OCR Processing
         const ocrResult = await processImageWithOCR(image.file);
         
-        if (!ocrResult.success || !ocrResult.data) {
-          throw new Error(ocrResult.error || 'OCR processing failed');
+        if (!ocrResult.tracking_id && !ocrResult.amount) {
+          throw new Error('Failed to extract tracking ID or amount from image');
         }
 
         // Step 2: Match with dispatches
-        const matchResult = await matchOCRWithDispatches(ocrResult.data);
+        const matchResult = await matchOCRWithDispatches(ocrResult);
 
         // Step 3: Auto-apply if high confidence exact match
-        if (matchResult.status === 'auto_applied' && matchResult.dispatch_id) {
-          await applyOCRMatch(matchResult.dispatch_id, ocrResult.data.amount);
+        if (matchResult.status === 'auto_applied' && matchResult.dispatch?.id) {
+          await applyOCRMatch(matchResult.dispatch.id, ocrResult);
         }
 
         // Update with completed result
@@ -159,10 +159,10 @@ export default function OCRPage() {
 
   const handleConfirmMatch = async (index: number) => {
     const image = images[index];
-    if (!image.result?.dispatch_id || !image.result?.extracted_amount) return;
+    if (!image.result?.dispatch?.id || !image.result?.extraction?.amount) return;
 
     try {
-      const success = await applyOCRMatch(image.result.dispatch_id, image.result.extracted_amount);
+      const success = await applyOCRMatch(image.result.dispatch.id, image.result.extraction);
       if (success) {
         setImages(prev => prev.map((img, idx) => 
           idx === index && img.result ? {
@@ -182,8 +182,8 @@ export default function OCRPage() {
   const handleConfirmSelected = async () => {
     const promises = Array.from(selectedMatches).map(async (index) => {
       const image = images[index];
-      if (!image.result?.dispatch_id || !image.result?.extracted_amount) return false;
-      return await applyOCRMatch(image.result.dispatch_id, image.result.extracted_amount);
+      if (!image.result?.dispatch?.id || !image.result?.extraction?.amount) return false;
+      return await applyOCRMatch(image.result.dispatch.id, image.result.extraction);
     });
 
     const results = await Promise.all(promises);
@@ -214,8 +214,8 @@ export default function OCRPage() {
 
     const promises = highConfidenceIndices.map(async (index) => {
       const image = images[index];
-      if (!image.result?.dispatch_id || !image.result?.extracted_amount) return false;
-      return await applyOCRMatch(image.result.dispatch_id, image.result.extracted_amount);
+      if (!image.result?.dispatch?.id || !image.result?.extraction?.amount) return false;
+      return await applyOCRMatch(image.result.dispatch.id, image.result.extraction);
     });
 
     const results = await Promise.all(promises);
@@ -369,7 +369,7 @@ export default function OCRPage() {
                         {/* Status Badge */}
                         <div className="absolute bottom-2 left-2">
                           {img.status === 'pending' && (
-                            <Badge variant="secondary" className="shadow-md">Pending</Badge>
+                            <Badge variant="default" className="shadow-md">Pending</Badge>
                           )}
                           {img.status === 'processing' && (
                             <Badge variant="default" className="animate-pulse-glow shadow-md">
@@ -380,7 +380,7 @@ export default function OCRPage() {
                             <Badge variant="success" className="shadow-md">✓ Done</Badge>
                           )}
                           {img.status === 'error' && (
-                            <Badge variant="destructive" className="shadow-md">✗ Error</Badge>
+                            <Badge variant="danger" className="shadow-md">✗ Error</Badge>
                           )}
                         </div>
                       </div>
@@ -470,7 +470,7 @@ export default function OCRPage() {
           <div className="space-y-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Match Results</h2>
             
-            {completedImages.map((img, originalIndex) => {
+            {completedImages.map((img) => {
               const index = images.indexOf(img);
               const result = img.result;
               if (!result) return null;
@@ -479,6 +479,7 @@ export default function OCRPage() {
                 high: 'text-green-700 bg-green-100 border-green-300',
                 medium: 'text-yellow-700 bg-yellow-100 border-yellow-300',
                 low: 'text-red-700 bg-red-100 border-red-300',
+                none: 'text-gray-700 bg-gray-100 border-gray-300',
               }[result.match_confidence];
 
               const statusColor = {
@@ -511,15 +512,15 @@ export default function OCRPage() {
                         <div className="flex items-start justify-between">
                           <div>
                             <h3 className="text-lg font-bold text-gray-900 mb-1">
-                              {result.customer_name || 'Match Found'}
+                              {result.dispatch?.customer_name || 'Match Found'}
                             </h3>
                             <p className="text-sm text-gray-600">
-                              Tracking: <span className="font-mono font-semibold text-blue-600">{result.extracted_tracking_id}</span>
+                              Tracking: <span className="font-mono font-semibold text-blue-600">{result.extraction.tracking_id || 'N/A'}</span>
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className={`inline-block w-3 h-3 rounded-full ${statusColor}`} />
-                            <Badge variant={result.status === 'auto_applied' ? 'success' : result.status === 'needs_review' ? 'warning' : 'secondary'}>
+                            <Badge variant={result.status === 'auto_applied' ? 'success' : result.status === 'needs_review' ? 'warning' : 'default'}>
                               {result.status === 'auto_applied' ? '✓ Applied' : result.status === 'needs_review' ? '⚠ Review' : 'No Match'}
                             </Badge>
                           </div>
@@ -529,7 +530,7 @@ export default function OCRPage() {
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Extracted Amount</p>
-                            <p className="text-base font-bold text-gray-900">{formatCurrency(result.extracted_amount)}</p>
+                            <p className="text-base font-bold text-gray-900">{formatCurrency(result.extraction.amount || 0)}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Confidence</p>
@@ -537,25 +538,25 @@ export default function OCRPage() {
                               {result.match_confidence.toUpperCase()}
                             </span>
                           </div>
-                          {result.order_id && (
+                          {result.dispatch?.id && (
                             <div>
                               <p className="text-xs text-gray-500 mb-1">Order ID</p>
-                              <p className="text-base font-semibold text-gray-900">#{result.order_id}</p>
+                              <p className="text-base font-semibold text-gray-900">#{result.dispatch.id}</p>
                             </div>
                           )}
-                          {result.matched_amount !== undefined && (
+                          {result.dispatch?.amount !== undefined && (
                             <div>
                               <p className="text-xs text-gray-500 mb-1">Expected Amount</p>
-                              <p className="text-base font-semibold text-gray-900">{formatCurrency(result.matched_amount)}</p>
+                              <p className="text-base font-semibold text-gray-900">{formatCurrency(Number(result.dispatch.amount))}</p>
                             </div>
                           )}
                         </div>
 
                         {/* Match Details */}
-                        {result.match_details && (
+                        {result.message && (
                           <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-100">
                             <p className="font-medium text-blue-900 mb-1">Match Details:</p>
-                            <p>{result.match_details}</p>
+                            <p>{result.message}</p>
                           </div>
                         )}
 
