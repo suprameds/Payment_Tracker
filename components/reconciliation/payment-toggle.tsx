@@ -11,7 +11,7 @@ interface PaymentToggleProps {
   onSuccess?: () => void;
 }
 
-export function PaymentToggle({ dispatchId, currentStatus, trackingId, onSuccess }: PaymentToggleProps) {
+export function PaymentToggle({ dispatchId, currentStatus, trackingId: _trackingId, onSuccess }: PaymentToggleProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -31,10 +31,11 @@ export function PaymentToggle({ dispatchId, currentStatus, trackingId, onSuccess
       const { data: { user } } = await supabase.auth.getUser();
       
       // Update dispatch
-      const { error } = await supabase
-        .from('dispatches')
+      const { error } = await (supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .from('dispatches') as any)
         .update({
-          payment_received: newStatus,
+            payment_received: newStatus,
           payment_received_at: newStatus ? new Date().toISOString() : null,
           payment_received_by: newStatus ? (user?.email || 'manual') : null,
           last_modified_by: user?.id || null,

@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS dispatches (
   
   -- Audit Trail
   created_by UUID REFERENCES auth.users(id),
-  last_modified_by UUID REFERENCES auth.users(id)
+  last_modified_by UUID REFERENCES auth.users(id),
+  deleted_at TIMESTAMP WITH TIME ZONE
 );
 
 -- Indexes for performance

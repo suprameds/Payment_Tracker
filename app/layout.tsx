@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Navigation } from "@/components/layout/navigation";
+import { ToastProvider } from "@/components/providers/toast-provider";
+import { AuthProvider } from "@/components/providers/auth-provider";
+import { KeyboardShortcutsModal } from "@/components/ui/keyboard-shortcuts-modal";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,10 +31,15 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Navigation />
-        <div className="lg:pl-64">
-          {children}
-        </div>
+        <ToastProvider>
+          <AuthProvider>
+            <Navigation />
+            <div className="lg:pl-64">
+              {children}
+            </div>
+            <KeyboardShortcutsModal />
+          </AuthProvider>
+        </ToastProvider>
       </body>
     </html>
   );

@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/components/providers/auth-provider';
 import { supabase } from '@/lib/supabase/client';
-import { DashboardStats } from '@/lib/types/database';
+import { DashboardStats, Dispatch } from '@/lib/types/database';
 import { formatCurrency, formatDateForInput } from '@/lib/utils/format';
-import { StatsCard } from '@/components/dashboard/stats-card';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useKeyboard } from '@/hooks/use-keyboard';
 
 export default function HomePage() {
   const [stats, setStats] = useState<DashboardStats>({
@@ -21,6 +24,25 @@ export default function HomePage() {
   });
   const [loading, setLoading] = useState(true);
 
+  // Quick Search & Keyboard Shortcuts
+  const [searchTerm, setSearchTerm] = useState('');
+  const router = useRouter();
+  const { isManager, isAdmin } = useAuth();
+  
+  const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const term = e.currentTarget.value;
+      if (term.trim()) {
+        router.push(`/reconciliation?search=${encodeURIComponent(term)}`);
+      }
+    }
+  };
+
+  useKeyboard('k', () => {
+    const searchInput = document.getElementById('dashboard-search-input');
+    searchInput?.focus();
+  }, { ctrl: true });
+
   useEffect(() => {
     fetchDashboardStats();
   }, []);
@@ -31,22 +53,22 @@ export default function HomePage() {
       const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
 
       // Fetch today's dispatches
-      const { data: todayData } = await supabase
+      const { data: todayDataRaw } = await supabase
         .from('dispatches')
-        .select('amount')
+        .select('*')
         .eq('date', today);
 
       // Fetch pending reconciliations
-      const { data: pendingData } = await supabase
+      const { data: pendingDataRaw } = await supabase
         .from('dispatches')
-        .select('amount')
+        .select('*')
         .eq('delivery_status', 'Delivered')
         .eq('payment_received', false);
 
       // Fetch this month's dispatches
-      const { data: monthData } = await supabase
+      const { data: monthDataRaw } = await supabase
         .from('dispatches')
-        .select('amount')
+        .select('*')
         .gte('date', startOfMonth);
 
       // Fetch OCR pending
@@ -55,13 +77,18 @@ export default function HomePage() {
         .select('id')
         .eq('status', 'pending');
 
+      // Explicitly cast to Dispatch[] to avoid type inference issues
+      const todayDispatches = (todayDataRaw || []) as Dispatch[];
+      const pendingDispatches = (pendingDataRaw || []) as Dispatch[];
+      const monthDispatches = (monthDataRaw || []) as Dispatch[];
+
       setStats({
-        today_count: todayData?.length || 0,
-        today_amount: todayData?.reduce((sum, d) => sum + Number(d.amount), 0) || 0,
-        pending_reconciliation_count: pendingData?.length || 0,
-        pending_reconciliation_amount: pendingData?.reduce((sum, d) => sum + Number(d.amount), 0) || 0,
-        month_count: monthData?.length || 0,
-        month_amount: monthData?.reduce((sum, d) => sum + Number(d.amount), 0) || 0,
+        today_count: todayDispatches.length,
+        today_amount: todayDispatches.reduce((sum, d) => sum + Number(d.amount), 0),
+        pending_reconciliation_count: pendingDispatches.length,
+        pending_reconciliation_amount: pendingDispatches.reduce((sum, d) => sum + Number(d.amount), 0),
+        month_count: monthDispatches.length,
+        month_amount: monthDispatches.reduce((sum, d) => sum + Number(d.amount), 0),
         ocr_pending_count: ocrData?.length || 0,
       });
     } catch (error) {
@@ -91,11 +118,26 @@ export default function HomePage() {
       {/* Hero Header */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="animate-fade-in">
-            <h1 className="text-4xl font-bold mb-2">Welcome Back! 👋</h1>
-            <p className="text-blue-100 text-lg">
-              Here's an overview of your dispatch and payment activity
-            </p>
+          <div className="animate-fade-in flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+            <div>
+              <h1 className="text-4xl font-bold mb-2">Welcome Back! 👋</h1>
+              <p className="text-blue-100 text-lg">
+                Here&apos;s an overview of your dispatch and payment activity
+              </p>
+            </div>
+             {/* Quick Search Widget */}
+            <div className="w-full md:w-96 bg-white/10 backdrop-blur-md p-1 rounded-xl border border-white/20">
+               <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-100">🔍</span>
+                <input 
+                  type="text" 
+                  placeholder="Quick search dispatch... (Ctrl+K)"
+                  className="w-full bg-white/10 border-none rounded-lg py-2 pl-10 pr-4 text-white placeholder-blue-200 focus:ring-2 focus:ring-white/50 focus:outline-none transition-all"
+                  onKeyDown={handleSearch}
+                  id="dashboard-search-input"
+                />
+               </div>
+            </div>
           </div>
         </div>
       </div>
@@ -115,7 +157,7 @@ export default function HomePage() {
                     <div className="text-blue-100 text-sm font-medium">Dispatches</div>
                   </div>
                 </div>
-                <div className="text-blue-100 text-sm font-semibold">Today's Total</div>
+                <div className="text-blue-100 text-sm font-semibold">Today&apos;s Total</div>
                 <div className="text-2xl font-bold mt-1">{formatCurrency(stats.today_amount)}</div>
               </CardContent>
             </Card>
@@ -201,16 +243,18 @@ export default function HomePage() {
               <Link href="/manifest" className="block">
                 <div className="h-24 rounded-xl border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 hover:border-blue-400 hover:shadow-lg transition-all cursor-pointer flex flex-col items-center justify-center gap-2 group">
                   <span className="text-3xl group-hover:scale-110 transition-transform">📄</span>
-                  <span className="text-base font-semibold text-gray-700">Today's Manifest</span>
+                  <span className="text-base font-semibold text-gray-700">Today&apos;s Manifest</span>
                 </div>
               </Link>
               
-              <Link href="/reconciliation" className="block">
-                <div className="h-24 rounded-xl border-2 border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 hover:border-green-400 hover:shadow-lg transition-all cursor-pointer flex flex-col items-center justify-center gap-2 group">
-                  <span className="text-3xl group-hover:scale-110 transition-transform">💰</span>
-                  <span className="text-base font-semibold text-gray-700">Reconcile Payments</span>
-                </div>
-              </Link>
+              {(isManager || isAdmin) && (
+                <Link href="/reconciliation" className="block">
+                  <div className="h-24 rounded-xl border-2 border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 hover:border-green-400 hover:shadow-lg transition-all cursor-pointer flex flex-col items-center justify-center gap-2 group">
+                    <span className="text-3xl group-hover:scale-110 transition-transform">💰</span>
+                    <span className="text-base font-semibold text-gray-700">Reconcile Payments</span>
+                  </div>
+                </Link>
+              )}
               
               <Link href="/ocr" className="block">
                 <div className="h-24 rounded-xl border-2 border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50 hover:border-purple-400 hover:shadow-lg transition-all cursor-pointer flex flex-col items-center justify-center gap-2 group">
@@ -243,7 +287,7 @@ export default function HomePage() {
                 <span className="text-3xl flex-shrink-0">2️⃣</span>
                 <div>
                   <p className="font-bold text-gray-900 mb-1">Generate Manifest</p>
-                  <p className="text-sm text-gray-600">Print today's manifest for Post Office submission</p>
+                  <p className="text-sm text-gray-600">Print today&apos;s manifest for Post Office submission</p>
                 </div>
               </div>
               <div className="flex gap-4 p-3 rounded-lg bg-purple-50/50 hover:bg-purple-50 transition-colors">

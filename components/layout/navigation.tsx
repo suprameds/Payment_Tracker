@@ -4,18 +4,28 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils/cn';
 import { useState } from 'react';
+import { useAuth } from '@/components/providers/auth-provider';
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: '📊', color: 'from-blue-500 to-indigo-600' },
-  { name: 'New Entry', href: '/entry', icon: '➕', color: 'from-green-500 to-emerald-600' },
-  { name: "Today's Manifest", href: '/manifest', icon: '📄', color: 'from-purple-500 to-indigo-600' },
-  { name: 'Reconciliation', href: '/reconciliation', icon: '💰', color: 'from-amber-500 to-orange-600' },
-  { name: 'OCR Upload', href: '/ocr', icon: '🔍', color: 'from-pink-500 to-rose-600' },
+  { name: 'Dashboard', href: '/', icon: '📊', color: 'from-blue-500 to-indigo-600', roles: ['admin', 'manager', 'dispatcher'] },
+  { name: 'New Entry', href: '/entry', icon: '➕', color: 'from-green-500 to-emerald-600', roles: ['admin', 'manager', 'dispatcher'] },
+  { name: "Today's Manifest", href: '/manifest', icon: '📄', color: 'from-purple-500 to-indigo-600', roles: ['admin', 'manager', 'dispatcher'] },
+  { name: 'Reconciliation', href: '/reconciliation', icon: '💰', color: 'from-amber-500 to-orange-600', roles: ['admin', 'manager'] },
+  { name: 'OCR Upload', href: '/ocr', icon: '🔍', color: 'from-pink-500 to-rose-600', roles: ['admin', 'manager', 'dispatcher'] },
+  { name: 'Audit Logs', href: '/admin/audit', icon: '🛡️', color: 'from-gray-600 to-gray-800', roles: ['admin'] },
 ];
 
 export function Navigation() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, profile, signOut, isAdmin, isManager } = useAuth();
+
+  // Don't show navigation on auth pages
+  if (pathname === '/login' || pathname === '/signup') {
+    return null;
+  }
+
+  const userRole = profile?.role || 'dispatcher';
 
   return (
     <>
@@ -43,7 +53,7 @@ export function Navigation() {
       <aside
         className={cn(
           'fixed top-0 left-0 bottom-0 w-64 bg-white border-r border-gray-200 z-40 shadow-2xl',
-          'transform transition-all duration-300 ease-in-out',
+          'transform transition-all duration-300 ease-in-out flex flex-col',
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
@@ -65,6 +75,10 @@ export function Navigation() {
           <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
             {navigation.map((item) => {
               const isActive = pathname === item.href;
+              const hasAccess = item.roles.includes(userRole) || (isAdmin && true); // Admin access all
+              
+              if (!hasAccess) return null;
+
               return (
                 <Link
                   key={item.name}
@@ -105,22 +119,27 @@ export function Navigation() {
             })}
           </nav>
 
-          {/* Footer Stats */}
+          {/* Footer User Info */}
           <div className="p-4 border-t border-gray-200 bg-gradient-to-br from-gray-50 to-blue-50/30">
             <div className="bg-white rounded-xl p-3 shadow-sm mb-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-gray-600">System Status</span>
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              </div>
-              <div className="text-xs text-gray-500 space-y-1">
-                <div className="flex justify-between">
-                  <span>Uptime</span>
-                  <span className="font-mono font-semibold text-green-600">99.9%</span>
+                <div className="flex flex-col">
+                   <span className="text-sm font-bold text-gray-800 truncate max-w-[140px]">{profile?.full_name || user?.email?.split('@')[0] || 'User'}</span>
+                   <span className="text-xs text-blue-600 font-medium uppercase tracking-wider">{userRole}</span>
                 </div>
+                <button 
+                  onClick={signOut}
+                  title="Sign Out"
+                  className="p-1.5 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                </button>
               </div>
             </div>
-            <p className="text-xs text-gray-500 text-center font-medium">
-              v1.0.0 • {new Date().getFullYear()}
+            <p className="text-xs text-gray-400 text-center font-medium">
+              v1.1.0 • {new Date().getFullYear()}
             </p>
           </div>
         </div>

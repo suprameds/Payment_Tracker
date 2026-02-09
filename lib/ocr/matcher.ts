@@ -49,7 +49,7 @@ export async function matchOCRWithDispatches(extraction: OCRResult): Promise<Mat
       };
     }
 
-    const dispatch = dispatches[0];
+    const dispatch = (dispatches[0] as unknown) as Dispatch;
 
     // Check if amount matches (with tolerance)
     let amount_matches = false;
@@ -108,8 +108,9 @@ export async function applyOCRMatch(dispatchId: string, extraction: OCRResult): 
   try {
     const { data: { user } } = await supabase.auth.getUser();
 
-    const { error } = await supabase
-      .from('dispatches')
+    const { error } = await (supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .from('dispatches') as any)
       .update({
         payment_received: true,
         payment_received_at: new Date().toISOString(),
